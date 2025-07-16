@@ -9,22 +9,22 @@ import re
 
 def create_structured_bop_table(countries_dict: dict):
     """
-    Loads raw quarterly BOP data for multiple countries, calculates key aggregates,
-    and structures the data into a standard IMF presentation format.
+    Carga datos trimestrales de BOP para múltiples países, calcula agregados clave,
+    y estructura los datos en un formato de presentación estándar del FMI.
 
     Args:
-        countries_dict (dict): A dictionary mapping 3-letter codes to full names.
-                               Example: {'ARG': 'Argentina', 'BRA': 'Brazil'}
+        countries_dict (dict): Un mapeo de códigos de 3 letras a nombres completos.
+                               Ejemplo: {'ARG': 'Argentina', 'BRA': 'Brazil'}
     Returns:
-        A pandas DataFrame with the structured BOP data, or None if data is not found.
+        Un DataFrame de pandas con los datos de BOP estructurados, o None si no se encuentra datos.
     """
     country_codes = list(countries_dict.keys())
-    print(f"--- Loading and processing BOP data for: {', '.join(countries_dict.values())} ---")
+    print(f"--- Cargando y procesando datos de BOP para: {', '.join(countries_dict.values())} ---")
 
     try:
         df_raw = pd.read_csv('balanza_latam.csv')
     except FileNotFoundError:
-        print("Error: Make sure 'balanza_latam.csv' is in your script's directory.")
+        print("Error: Asegúrate de que 'balanza_latam.csv' esté en el directorio de tu script.")
         return None
 
     series_endings = {
@@ -50,10 +50,9 @@ def create_structured_bop_table(countries_dict: dict):
 
     series_codes_to_keep = [f"{code}.{ending}" for code in country_codes for ending in series_endings.values()]
     df_filtered = df_raw[df_raw['SERIES_CODE'].isin(series_codes_to_keep)].copy()
-    print(df_filtered.head())  # Debugging line to check the filtered Data
 
     if df_filtered.empty:
-        print(f"Warning: No quarterly data found for the specified country codes: {country_codes}.")
+        print(f"Advertencia: No se encontraron datos trimestrales para los códigos de país especificados: {country_codes}.")
         return None
 
     df_filtered['Country_Code'] = df_filtered['SERIES_CODE'].apply(lambda x: x.split('.')[0])
@@ -83,53 +82,41 @@ def create_structured_bop_table(countries_dict: dict):
     df_bop = df_pivot.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name not in ['Country_Code', 'Quarter'] else x)
 
     df_bop = df_bop.fillna(0)
-    # Calculate Aggregates
     current_account_components = ['Goods Balance', 'Services Balance', 'Primary Income', 'Secondary Income']
     financial_account_components = ['Direct Investment', 'Portfolio Investment', 'Financial Derivatives', 'Other Investment', 'Reserve Assets']
     
-    # With this improved section:
     df_bop['Current Account_Calculated'] = df_bop[current_account_components].sum(axis=1)
 
-    # Create a 'Validation' column to check for discrepancies
-    # We round to 2 decimal places to avoid floating point precision issues
     df_bop['CA_Validation_Diff'] = (df_bop['Current Account'].round(2) - df_bop['Current Account_Calculated'].round(2))
 
-    # Print a warning for any rows where the check fails
     mismatches = df_bop[~np.isclose(df_bop['Current Account'], df_bop['Current Account_Calculated'], atol=0.01)]
 
     if not mismatches.empty:
-        print("\n--- WARNING: Current Account Mismatches Found! ---")
-        print("The sum of components does not match the reported Current Account for:")
+        print("\n--- ADVERTENCIA: ¡Se encontraron discrepancias en la Cuenta Corriente! ---")
+        print("La suma de los componentes no coincide con la Cuenta Corriente reportada para:")
         print(df_bop['CA_Validation_Diff'].round(2))
         print(mismatches[['Country_Code', 'Quarter', 'Current Account', 'Current Account_Calculated']])
     else:
-        print("\n✓ Current Account validation successful. All components add up correctly.")
+        print("\n✓ Validación de la Cuenta Corriente exitosa. Todos los componentes suman correctamente.")
 
-    # You can drop the check columns before exporting if you wish
     df_bop.drop(columns=['Current Account_Calculated', 'CA_Validation_Diff'], inplace=True)
-
-
 
     df_bop['Financial Account_Calculated'] = df_bop[financial_account_components].sum(axis=1)
 
-    # Create a 'Validation' column to check for discrepancies
-    # We round to 2 decimal places to avoid floating point precision issues
     df_bop['FA_Validation_Diff'] = (df_bop['Financial Account'].round(2) - df_bop['Financial Account_Calculated'].round(2))
 
-    # Print a warning for any rows where the check fails
     mismatches = df_bop[~np.isclose(df_bop['Financial Account'], df_bop['Financial Account_Calculated'], atol=0.01)]
 
     if not mismatches.empty:
-        print("\n--- WARNING: Financial Account Mismatches Found! ---")
-        print("The sum of components does not match the reported Financial Account for:")
+        print("\n--- ADVERTENCIA: ¡Se encontraron discrepancias en la Cuenta Financiera! ---")
+        print("La suma de los componentes no coincide con la Cuenta Financiera reportada para:")
         print(mismatches[['Country_Code', 'Quarter', 'Financial Account', 'Financial Account_Calculated']])
-        print("\nDetailed differences:")
+        print("\nDiferencias detalladas:")
         for idx, row in mismatches.iterrows():
-            print(f"Row {idx}: {row['Country_Code']} {row['Quarter']} - Diff: {row['FA_Validation_Diff']:.10f}")
+            print(f"Fila {idx}: {row['Country_Code']} {row['Quarter']} - Diff: {row['FA_Validation_Diff']:.10f}")
     else:
-        print("\n✓ Financial Account validation successful. All components add up correctly.")
+        print("\n✓ Validación de la Cuenta Financiera exitosa. Todos los componentes suman correctamente.")
 
-    # You can drop the check columns before exporting if you wish
     df_bop.drop(columns=['Financial Account_Calculated', 'FA_Validation_Diff'], inplace=True)
 
 
@@ -138,27 +125,27 @@ def create_structured_bop_table(countries_dict: dict):
 
     df_bop['Financial Account'] = df_bop[financial_account_components].sum(axis=1)
     
-    above_the_line_components = ['Current Account', 'Capital Account', 'Financial Account', 'Net Errors & Omissions']
-    df_bop['Overall Balance'] = df_bop[above_the_line_components].sum(axis=1)
-    
+    above_the_line_components = ['Current Account', 'Capital Account', 'Direct Investment', 'Portfolio Investment', 'Financial Derivatives', 'Other Investment', 'Net Errors & Omissions']
+    df_bop['Overall Balance'] = -1 * df_bop['Reserve Assets']
+    df_bop['Exceptional Financing'] = (df_bop[above_the_line_components].sum(axis=1)) + df_bop['Reserve Assets']
+
+    print(df_bop.head())
     df_bop['Country_Name'] = df_bop['Country_Code'].map(countries_dict)
     
-    print("✓ Data processing complete.")
     return df_bop
 
-# --- 2. Plotting Functions ---
+# --- 2. Ploteo de Funciones ---
 
 def plot_detailed_bop(df_country_data, country_name):
     """
-    Generates a detailed quarterly stacked bar chart for a single country.
+    Genera un gráfico de barras apiladas trimestral detallado para un solo país.
     """
-    print(f"\n--- Generating Detailed BOP Graph for {country_name} ---")
+    print(f"\n--- Generando Gráfico Detallado de BOP para {country_name} ---")
     df_plot = df_country_data.copy()
-    df_plot['Financing (-Δ Reserves)'] = -1 * df_plot['Reserve Assets']
+    df_plot['Financing (-Δ Reserves)'] = df_plot['Reserve Assets']
     df_plot['QuarterStr'] = df_plot['Quarter'].astype(str) # Use string representation for plotting
     df_plot.set_index('QuarterStr', inplace=True)
     
-    # --- Component Lists and Colors ---
     current_account_components = ['Goods Balance', 'Services Balance', 'Primary Income', 'Secondary Income']
     financial_account_components = ['Direct Investment', 'Portfolio Investment', 'Financial Derivatives', 'Other Investment']
     other_components = ['Capital Account', 'Net Errors & Omissions']
@@ -170,7 +157,7 @@ def plot_detailed_bop(df_country_data, country_name):
         'Direct Investment': '#27ae60', 'Portfolio Investment': '#2ecc71', 'Financial Derivatives': '#1abc9c', 'Other Investment': '#3498db'
     }
 
-    # --- Visualization ---
+    # --- Visualización ---
     sns.set_style("whitegrid")
     fig, ax = plt.subplots(figsize=(20, 10))
     
@@ -179,11 +166,11 @@ def plot_detailed_bop(df_country_data, country_name):
     ax.plot(df_plot.index, df_plot['Overall Balance'], color='#34495e', marker='o', linestyle='-', linewidth=3, markersize=8, label='Overall Balance (Sum of Bars)', zorder=10)
     ax.scatter(df_plot.index, df_plot['Financing (-Δ Reserves)'], color='#8e44ad', marker='X', s=150, linewidth=2, label='Financing (-Δ in Reserves)', zorder=11, edgecolors='w')
     
-    # --- Formatting ---
+    # --- Formateo ---
     ax.axhline(0, color='black', linewidth=1.5, linestyle='--')
-    ax.set_title(f"{country_name}: Detailed Quarterly Balance of Payments", fontsize=20, fontweight='bold', pad=20)
-    ax.set_xlabel("Quarter", fontsize=14)
-    ax.set_ylabel("Millions of USD", fontsize=14)
+    ax.set_title(f"{country_name}: Gráfico Detallado de la Balanza de Pagos Trimestral", fontsize=20, fontweight='bold', pad=20)
+    ax.set_xlabel("Trimestre", fontsize=14)
+    ax.set_ylabel("Billones de USD", fontsize=14)
     formatter = mticker.FuncFormatter(lambda x, p: f'{int(x):,}')
     ax.yaxis.set_major_formatter(formatter)
     
@@ -198,10 +185,10 @@ def plot_detailed_bop(df_country_data, country_name):
 
 def plot_multi_country_overall_balance(df_all_data):
     """
-    Generates a line chart comparing the Overall Balance for multiple countries.
+    Genera un gráfico de líneas que compara la Cuenta Corriente para múltiples países.
     """
-    print("\n--- Generating Multi-Country Overall Balance Comparison ---")
-    
+    print("\n--- Generando Comparación de la Cuenta Corriente entre Múltiples Países ---")
+
     sns.set_style("whitegrid")
     fig, ax = plt.subplots(figsize=(14, 8))
     
@@ -218,50 +205,47 @@ def plot_multi_country_overall_balance(df_all_data):
         ax=ax
     )
 
-    # --- Formatting ---
+    # --- Formateo ---
     ax.axhline(0, color='black', linewidth=1, linestyle='--')
-    ax.set_title("Quarterly BOP Overall Balance Comparison", fontsize=18, fontweight='bold')
-    ax.set_xlabel("Quarter", fontsize=12)
-    ax.set_ylabel("Millions of USD", fontsize=12)
+    ax.set_title("Comparación Trimestral de la Balanza de Pagos", fontsize=18, fontweight='bold')
+    ax.set_xlabel("Trimestre", fontsize=12)
+    ax.set_ylabel("Billones de USD", fontsize=12)
     formatter = mticker.FuncFormatter(lambda x, p: f'{int(x):,}')
     ax.yaxis.set_major_formatter(formatter)
     
-    # Make x-axis labels more readable
     tick_labels = df_all_data['QuarterStr'].unique()
     ax.set_xticks(range(len(tick_labels)))
     ax.set_xticklabels(tick_labels, rotation=90, ha='center')
-    # Show fewer labels to avoid clutter
     ax.xaxis.set_major_locator(mticker.MaxNLocator(nbins=16))
-    
-    ax.legend(title="Country", fontsize=10)
-    
+
+    ax.legend(title="País", fontsize=10)
+
     plt.tight_layout()
     plt.show()
 
-# --- 3. Main Execution Block ---
+# --- 3. Ejecución Principal de código ---
 
 if __name__ == "__main__":
-    
-    # Define the countries you want to process.
-    # IMPORTANT: Your 'balanza_latam.csv' file MUST contain the data for all countries listed here.
+
+    # Define los países que quieres procesar.
+    # IMPORTANTE:  Tu archivo 'balanza_latam.csv' DEBE contener los datos de todos los países enumerados aquí.
     countries_to_analyze = {
         'ARG': 'Argentina',
-        'BRA': 'Brazil',  # Example: Uncomment if you add Brazil data
-        'CHL': 'Chile',    # Example: Uncomment if you add Chile data
-        'COL': 'Colombia', # Example: Uncomment if you add Colombia data
-        'URY': 'Uruguay',   # Example: Uncomment if you add Uruguay data
-        'PER': 'Peru',       # Example: Uncomment if you add Peru data
+        'BRA': 'Brazil',  
+        'CHL': 'Chile',    
+        'COL': 'Colombia', 
+        'URY': 'Uruguay',   
+        'PER': 'Peru',       
         'MEX': 'Mexico',
         'BOL': 'Bolivia',
         'PRY': 'Paraguay'
     }
-    
-    # Load and process the data for all specified countries
+
+    # Carga y procesa los datos para todos los países especificados
     bop_data = create_structured_bop_table(countries_to_analyze)
-    print('Data!!!!', bop_data)
 
     if bop_data is not None:
-        # --- Export the structured data to a CSV file ---
+        # --- Exporta la data estructurada a un archivo CSV ---
         output_csv_filename = "BOP_quad_analysis.csv"
 
         final_column_order = [
@@ -289,23 +273,23 @@ if __name__ == "__main__":
             'Reserve Assets' # Below-the-line financing
         ]
 
-        # Reorder the DataFrame columns before exporting
+        # Reordena las columnas del DataFrame antes de exportar
         bop_data_ordered = bop_data[final_column_order]
         bop_data_ordered.fillna(0, inplace=True)
         bop_data_ordered.to_csv(output_csv_filename, index=False)
-        print(f"\n✓ Full structured data exported to: {output_csv_filename}")
+        print(f"\n✓ Data completa estructurada exportada a: {output_csv_filename}")
 
-        # --- Generate Plots ---
-        
-        # 1. Detailed plot for each country individually
+        # --- Genera Plots ---
+
+        # 1. Plot detallado para cada país individualmente
         for code, name in countries_to_analyze.items():
             single_country_df = bop_data[bop_data['Country_Code'] == code]
             plot_detailed_bop(single_country_df, name)
-            
-        # 2. Comparison plot if more than one country is specified
+
+        # 2. Plot de comparación si se especifican más de un país
         if len(countries_to_analyze) > 1:
             plot_multi_country_overall_balance(bop_data)
         else:
-            print("\nSkipping multi-country comparison plot as only one country was specified.")
+            print("\nSaltea el plot de comparación entre países ya que solo se especificó un país.")
 
-        print("\nAll tasks completed successfully.")
+        print("\nTodas las tareas se completaron con éxito.")
