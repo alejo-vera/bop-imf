@@ -6,7 +6,7 @@ import plotly.graph_objects as go
 # --- 1. Carga de Data ---
 # Esta función carga los datos preestructurados.
 # El decorador @st.cache_data hace que la aplicación sea rápida al cargar los datos solo una vez.
-@st.cache_data
+# @st.cache_data
 def load_bop_data(filepath="BOP_quad_analysis.csv"):
     """Carga los datos preestructurados de la BOP desde el archivo CSV."""
     try:
