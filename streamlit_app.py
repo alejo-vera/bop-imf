@@ -30,8 +30,8 @@ def create_detailed_bop_figure(df_single_country: pd.DataFrame, country_name: st
         Figura Plotly.
     """
     df_plot = df_single_country.copy()
-
-    df_plot['Financing'] = -1 * df_plot['Overall Balance']
+    print(df_plot.columns)
+    df_plot['(Δ Reserves)'] = df_plot['Reserve Assets']  # Invertir el saldo neto para mostrarlo como financiamiento
 
     components_to_plot = [
         'Goods Balance', 'Services Balance', 'Primary Income', 'Secondary Income',
@@ -60,18 +60,18 @@ def create_detailed_bop_figure(df_single_country: pd.DataFrame, country_name: st
 
     fig.add_trace(go.Scatter(
         x=df_plot['Quarter'],
-        y=df_plot['Overall Balance'],
+        y=df_plot['Net lending/borrowing'],
         mode='lines+markers',
-        name='Overall Balance (Sum of Bars)',
+        name='Net lending/borrowing',
         line=dict(color='#34495e', width=3),
         marker=dict(size=8)
     ))
     
     fig.add_trace(go.Scatter(
         x=df_plot['Quarter'],
-        y=df_plot['Financing'],
+        y=df_plot['(Δ Reserves)'],
         mode='markers',
-        name='Financing (Opposite of Overall Balance)',
+        name='(Δ Reserves)',
         marker=dict(symbol='x-thin', size=12, color='#8e44ad', line=dict(width=2))
     ))
 
@@ -138,11 +138,15 @@ else:
             fig_multi = px.line(
                 df_multi_filtered,
                 x='Quarter',
-                y='Overall Balance',
+                y='Net lending/borrowing',
                 color='Country_Name',
                 markers=True,
-                labels={'Overall Balance': 'Balanza de Pagos (Expresado en Billones de USD)', 'Quarter': 'Cuatrimestre. Fuente: Balanza de Pagos según metodología FMI'},
-                title='Comparación del Saldo de Balanza de Pagos Trimestral'
+                labels={'Net lending/borrowing': 'Balanza de Pagos (Expresado en Billones de USD)', 'Quarter': 'Cuatrimestre. Fuente: Balanza de Pagos según metodología FMI'},
+                title='Comparación del Saldo de Balanza de Pagos Trimestral',
+            )
+            fig_multi.update_yaxes(
+                tickformat="$", 
+                ticksuffix="B"
             )
             fig_multi.add_hline(y=0, line_dash="dash", line_color="black")
             st.plotly_chart(fig_multi, use_container_width=True)

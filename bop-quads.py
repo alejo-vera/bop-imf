@@ -42,7 +42,7 @@ def create_structured_bop_table(countries_dict: dict):
         'Portfolio Investment': 'NNAFANIL_T.P_F.USD.Q',
         'Financial Derivatives': 'NNAFANIL_T.F_F7.USD.Q',
         'Other Investment': 'NNAFANIL_T.O_F.USD.Q',
-        'Reserve Assets': 'A_T.R_F.USD.Q',
+        'Reserve Assets': 'NNAFANIL_T.RUE.USD.Q',
         'Financial Account': 'NNAFANIL_T.FAB.USD.Q',
         
         'Net Errors & Omissions': 'NETCD_T.EO.USD.Q'
@@ -82,56 +82,14 @@ def create_structured_bop_table(countries_dict: dict):
     df_bop = df_pivot.apply(lambda x: pd.to_numeric(x, errors='coerce') if x.name not in ['Country_Code', 'Quarter'] else x)
 
     df_bop = df_bop.fillna(0)
-    current_account_components = ['Goods Balance', 'Services Balance', 'Primary Income', 'Secondary Income']
-    financial_account_components = ['Direct Investment', 'Portfolio Investment', 'Financial Derivatives', 'Other Investment', 'Reserve Assets']
+
     
-    df_bop['Current Account_Calculated'] = df_bop[current_account_components].sum(axis=1)
-
-    df_bop['CA_Validation_Diff'] = (df_bop['Current Account'].round(2) - df_bop['Current Account_Calculated'].round(2))
-
-    mismatches = df_bop[~np.isclose(df_bop['Current Account'], df_bop['Current Account_Calculated'], atol=0.01)]
-
-    if not mismatches.empty:
-        print("\n--- ADVERTENCIA: ¡Se encontraron discrepancias en la Cuenta Corriente! ---")
-        print("La suma de los componentes no coincide con la Cuenta Corriente reportada para:")
-        print(df_bop['CA_Validation_Diff'].round(2))
-        print(mismatches[['Country_Code', 'Quarter', 'Current Account', 'Current Account_Calculated']])
-    else:
-        print("\n✓ Validación de la Cuenta Corriente exitosa. Todos los componentes suman correctamente.")
-
-    df_bop.drop(columns=['Current Account_Calculated', 'CA_Validation_Diff'], inplace=True)
-
-    df_bop['Financial Account_Calculated'] = df_bop[financial_account_components].sum(axis=1)
-
-    df_bop['FA_Validation_Diff'] = (df_bop['Financial Account'].round(2) - df_bop['Financial Account_Calculated'].round(2))
-
-    mismatches = df_bop[~np.isclose(df_bop['Financial Account'], df_bop['Financial Account_Calculated'], atol=0.01)]
-
-    if not mismatches.empty:
-        print("\n--- ADVERTENCIA: ¡Se encontraron discrepancias en la Cuenta Financiera! ---")
-        print("La suma de los componentes no coincide con la Cuenta Financiera reportada para:")
-        print(mismatches[['Country_Code', 'Quarter', 'Financial Account', 'Financial Account_Calculated']])
-        print("\nDiferencias detalladas:")
-        for idx, row in mismatches.iterrows():
-            print(f"Fila {idx}: {row['Country_Code']} {row['Quarter']} - Diff: {row['FA_Validation_Diff']:.10f}")
-    else:
-        print("\n✓ Validación de la Cuenta Financiera exitosa. Todos los componentes suman correctamente.")
-
-    df_bop.drop(columns=['Financial Account_Calculated', 'FA_Validation_Diff'], inplace=True)
-
-
-
-
-
-    df_bop['Financial Account'] = df_bop[financial_account_components].sum(axis=1)
+    above_the_line_components = ['Current Account', 'Capital Account'] 
+    df_bop['Net lending/borrowing'] = df_bop[above_the_line_components].sum(axis=1)
     
-    above_the_line_components = ['Current Account', 'Capital Account', 'Direct Investment', 'Portfolio Investment', 'Financial Derivatives', 'Other Investment', 'Net Errors & Omissions']
-    df_bop['Overall Balance'] = -1 * df_bop['Reserve Assets']
-    df_bop['Exceptional Financing'] = (df_bop[above_the_line_components].sum(axis=1)) + df_bop['Reserve Assets']
-
-    print(df_bop.head())
     df_bop['Country_Name'] = df_bop['Country_Code'].map(countries_dict)
     
+    print("✓ Procesamiento de Datos completado.")
     return df_bop
 
 # --- 2. Ploteo de Funciones ---
@@ -142,7 +100,7 @@ def plot_detailed_bop(df_country_data, country_name):
     """
     print(f"\n--- Generando Gráfico Detallado de BOP para {country_name} ---")
     df_plot = df_country_data.copy()
-    df_plot['Financing (-Δ Reserves)'] = df_plot['Reserve Assets']
+    df_plot['(Δ Reserves)'] = -1 * df_plot['Reserve Assets']
     df_plot['QuarterStr'] = df_plot['Quarter'].astype(str) # Use string representation for plotting
     df_plot.set_index('QuarterStr', inplace=True)
     
@@ -163,8 +121,8 @@ def plot_detailed_bop(df_country_data, country_name):
     
     df_plot[plot_order].plot(kind='bar', stacked=True, ax=ax, color=[colors.get(c) for c in plot_order], alpha=0.85, width=0.8)
     
-    ax.plot(df_plot.index, df_plot['Overall Balance'], color='#34495e', marker='o', linestyle='-', linewidth=3, markersize=8, label='Overall Balance (Sum of Bars)', zorder=10)
-    ax.scatter(df_plot.index, df_plot['Financing (-Δ Reserves)'], color='#8e44ad', marker='X', s=150, linewidth=2, label='Financing (-Δ in Reserves)', zorder=11, edgecolors='w')
+    ax.plot(df_plot.index, df_plot['Net lending/borrowing'], color='#34495e', marker='o', linestyle='-', linewidth=3, markersize=8, label='Overall Balance', zorder=10)
+    ax.scatter(df_plot.index, df_plot['(Δ Reserves)'], color='#8e44ad', marker='X', s=150, linewidth=2, label='(Δ in Reserves)', zorder=11, edgecolors='w')
     
     # --- Formateo ---
     ax.axhline(0, color='black', linewidth=1.5, linestyle='--')
@@ -197,7 +155,7 @@ def plot_multi_country_overall_balance(df_all_data):
     sns.lineplot(
         data=df_all_data,
         x='QuarterStr',
-        y='Overall Balance',
+        y='Net lending/borrowing',
         hue='Country_Name',
         palette='colorblind',
         marker='o',
@@ -269,7 +227,7 @@ if __name__ == "__main__":
             'Financial Account', # Aggregate
             # Balancing Items
             'Net Errors & Omissions',
-            'Overall Balance', # Aggregate
+            'Net lending/borrowing', # Aggregate
             'Reserve Assets' # Below-the-line financing
         ]
 
