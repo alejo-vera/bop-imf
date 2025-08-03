@@ -17,6 +17,81 @@ def load_bop_data(filepath="BOP_quad_analysis.csv"):
     except FileNotFoundError:
         return None
 
+def create_singular_bop_figure(df_single_country: pd.DataFrame, country_name: str):
+    """
+    Crea una figura interactiva de Plotly para la BOP detallada de un solo país.
+
+    Args:
+        df_single_country (pd.DataFrame): El DataFrame que contiene datos para SOLO un país.
+        country_name (str): El nombre completo del país para el título.
+
+    Returns:
+        Figura Plotly.
+    """
+    df_plot = df_single_country.copy()
+    df_plot['(Δ Reserves)'] = -1 * df_plot['Reserve Assets']  # Invertir el saldo neto para mostrarlo como financiamiento
+
+    print()
+    components_to_plot = [
+        'Current Account', 'Capital Account', 'Financial Account', 'Net Errors & Omissions',
+    ]
+
+    legend_names = [name.strip() for name in components_to_plot]
+
+    colors = {
+        'Current Account': '#e74c3c', 
+        'Capital Account': '#f39c12', 'Net Errors & Omissions': '#7f8c8d',
+        'Financial Account': '#3498db'
+    }
+
+    fig = go.Figure()
+
+    for component, legend_name in zip(components_to_plot, legend_names):
+        if component in df_plot.columns:
+            fig.add_trace(go.Bar(
+                x=df_plot['Quarter'],
+                y=df_plot[component],
+                name=legend_name,
+                marker_color=colors.get(component)
+            ))
+
+    fig.add_trace(go.Scatter(
+        x=df_plot['Quarter'],
+        y=df_plot['Net lending/borrowing'],
+        mode='lines+markers',
+        name='Net lending/borrowing',
+        line=dict(color='#34495e', width=3),
+        marker=dict(size=8)
+    ))
+    
+    fig.add_trace(go.Scatter(
+        x=df_plot['Quarter'],
+        y=df_plot['(Δ Reserves)'],
+        mode='markers',
+        name='(Δ Reserves)',
+        marker=dict(symbol='x-thin', size=12, color='#8e44ad', line=dict(width=2))
+    ))
+
+    fig.update_layout(
+        barmode='relative', 
+        title_text=f"Desglose de Balanza de Pagos: {country_name}",
+        xaxis_title="Cuatrimestre. Fuente: Balanza de Pagos según metodología FMI",
+        yaxis_title="Expresado en Billones de USD",
+        legend_title="Componente BOP",
+        template="plotly_white",
+        height=700,
+        xaxis_tickangle=-45,
+        legend=dict(traceorder='normal'),
+        yaxis=dict(
+            tickformat="$",
+            ticksuffix="B"
+        )
+    )
+    fig.add_hline(y=0, line_dash="dash", line_color="black", line_width=1)
+    
+    return fig
+
+
 # --- 2. Gráfico para una Vista Detallada ---
 def create_detailed_bop_figure(df_single_country: pd.DataFrame, country_name: str):
     """
@@ -30,7 +105,6 @@ def create_detailed_bop_figure(df_single_country: pd.DataFrame, country_name: st
         Figura Plotly.
     """
     df_plot = df_single_country.copy()
-    print(df_plot.columns)
     df_plot['(Δ Reserves)'] = df_plot['Reserve Assets']  # Invertir el saldo neto para mostrarlo como financiamiento
 
     components_to_plot = [
@@ -106,7 +180,24 @@ if bop_data is None:
 else:
     all_countries = sorted(bop_data['Country_Name'].unique())
 
-    # --- Part 1: Vista detallada por País ---
+    # --- Parte 1: Vista general por País ---
+    st.header("Principales flujos por País")
+
+    country_to_show = st.selectbox(
+        'Selecciona un país para ver los principales flujos de Balanza de pagos:',
+        options=all_countries
+    )
+
+    if country_to_show:
+        # Filtra el DataFrame principal para el país seleccionado
+        df_single = bop_data[bop_data['Country_Name'] == country_to_show]
+
+        # Genera y muestra el gráfico utilizando nuestra función dedicada
+        detailed_fig = create_singular_bop_figure(df_single, country_to_show)
+        st.plotly_chart(detailed_fig, use_container_width=True)
+
+
+    # --- Part 2: Vista detallada por País ---
     st.header("Desglose Detallado por País")
 
     country_to_show = st.selectbox(
